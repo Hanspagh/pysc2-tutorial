@@ -156,30 +156,35 @@ class SparseAgent(base_agent.BaseAgent):
                         target = [int(m_x), int(m_y)]
                         return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
     
-
     def build_target(self, count, obs, building_type, target):
         unit_type = obs.observation['screen'][_UNIT_TYPE]
         if self.move_number == 0:
             return self.select_workers(unit_type)
         elif self.move_number == 1:
-            if count < 1 and building_type in obs.observation['available_actions']:
+            if building_type == _BUILD_FACTORY:
+                print("I DREAM OF FACTRORIES")
+            if count < 8 and building_type in obs.observation['available_actions']:
+                if building_type == _BUILD_FACTORY:
+                    print("LETS BUILD A FACTORY")
+                return actions.FunctionCall(building_type, [_NOT_QUEUED, target])
                 if self.cc_y.any():
                     if building_type == _BUILD_FACTORY:
                         print("FAT VAGINA")
                     return actions.FunctionCall(building_type, [_NOT_QUEUED, target])
         elif self.move_number == 2:
-            if _HARVEST_GATHER in obs.observation['available_actions']:
+            if _HARVEST_GATHER in obs.observation['available_actions'] and building_type is not _BUILD_REFINERY:
                 unit_y, unit_x = (unit_type == _NEUTRAL_MINERAL_FIELD).nonzero()
-            if unit_y.any():
-                i = random.randint(0, len(unit_y) - 1)
-                m_x = unit_x[i]
-                m_y = unit_y[i]
-                target = [int(m_x), int(m_y)]
-                return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+                if unit_y.any():
+                    i = random.randint(0, len(unit_y) - 1)
+                    m_x = unit_x[i]
+                    m_y = unit_y[i]
+                    target = [int(m_x), int(m_y)]
+                    return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
 
     def build(self, count, obs, building_type):
-        print("building {}".format(building_type))
-        target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * count)
+        #print("building {}".format(building_type))
+        #target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * count)
+        target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 16 * count)
         return self.build_target(count, obs, building_type, target)
 
     @staticmethod
@@ -188,7 +193,6 @@ class SparseAgent(base_agent.BaseAgent):
         unit_y, unit_x = (unit_type == _id).nonzero()
         if unit_y.any():
             i = random.randint(0, len(unit_y) - 1)
-
             m_x = unit_x[i]
             m_y = unit_y[i]
             return [m_x, m_y]
