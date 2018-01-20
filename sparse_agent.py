@@ -1,4 +1,5 @@
 import random
+import math
 
 import numpy as np
 import pandas as pd
@@ -138,6 +139,23 @@ class SparseAgent(base_agent.BaseAgent):
             target = [unit_x[i], unit_y[i]]
             return actions.FunctionCall(_SELECT_POINT, [_NOT_QUEUED, target])
 
+    def unit_attack(self, x, y, obs):
+        if self.move_number == 0:
+            if _SELECT_ARMY in obs.observation['available_actions']:
+                return actions.FunctionCall(_SELECT_ARMY, [_NOT_QUEUED])
+        elif self.move_number == 1:
+            do_it = True
+                
+            if len(obs.observation['single_select']) > 0 and obs.observation['single_select'][0][0] == _TERRAN_SCV:
+                do_it = False
+            
+            if len(obs.observation['multi_select']) > 0 and obs.observation['multi_select'][0][0] == _TERRAN_SCV:
+                do_it = False
+            
+            if do_it and _ATTACK_MINIMAP in obs.observation["available_actions"]:
+                x_offset = random.randint(-1, 1)
+                y_offset = random.randint(-1, 1)                
+                return actions.FunctionCall(_ATTACK_MINIMAP, [_NOT_QUEUED, self.transformLocation(int(x) + (x_offset * 8), int(y) + (y_offset * 8))])
 
     def train_unit(self, unit_type, building_type, obs):
         print("Train unit " + str(unit_type))
@@ -269,6 +287,21 @@ class SparseAgent(base_agent.BaseAgent):
             current_state[2] = building_count
             current_state[3] = obs.observation['player'][_ARMY_SUPPLY]
 
+            hot_squares = np.zeros(4)        
+            enemy_y, enemy_x = (obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
+            for i in range(0, len(enemy_y)):
+                y = int(math.ceil((enemy_y[i] + 1) / 32))
+                x = int(math.ceil((enemy_x[i] + 1) / 32))
+                
+                hot_squares[((y - 1) * 2) + (x - 1)] = 1
+            
+            if not self.base_top_left:
+                hot_squares = hot_squares[::-1]
+            
+            for i in range(0, 4):
+                current_state[i + 4] = hot_squares[i]
+
+
             if self.previous_action is not None:
                 self.qlearn.learn(str(self.previous_state),
                                   self.previous_action, 0, str(current_state))
@@ -295,6 +328,8 @@ class SparseAgent(base_agent.BaseAgent):
             move = self.train_unit(_TRAIN_MARINE, _TERRAN_BARRACKS, obs)
         elif smart_action == ACTION_TRAIN_MEDIC:
             move = self.train_unit(_TRAIN_MEDIC, _TERRAN_STARPORT, obs)
+        elif smart_action == ACTION_ATTACK:
+            move = self.unit_attack(x, y, obs)
         else:
             move = actions.FunctionCall(_NO_OP, [])
         if move is None:
