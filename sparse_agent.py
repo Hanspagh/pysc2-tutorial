@@ -1,5 +1,6 @@
 import random
 import math
+import os.path
 
 import numpy as np
 import pandas as pd
@@ -130,8 +131,8 @@ class SparseAgent(base_agent.BaseAgent):
         self.cc_x = None
         self.move_number = 0
 
-        #if os.path.isfile(DATA_FILE + '.gz'):
-            #self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
+        if os.path.isfile(DATA_FILE + '.gz'):
+            self.qlearn.q_table = pd.read_pickle(DATA_FILE + '.gz', compression='gzip')
     def select_workers(self, unit_type):
         unit_y, unit_x = (unit_type == _TERRAN_SCV).nonzero()
         if unit_y.any():
@@ -195,7 +196,7 @@ class SparseAgent(base_agent.BaseAgent):
         if self.move_number == 0:
             return self.select_workers(unit_type)
         elif self.move_number == 1:
-            if count < 1 and building_type in obs.observation['available_actions']:
+            if count < 10 and building_type in obs.observation['available_actions']:
                 if self.cc_y.any():
                     if building_type == _BUILD_FACTORY:
                         print("FAT VAGINA")
