@@ -147,7 +147,15 @@ class SparseAgent(base_agent.BaseAgent):
                     target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), -15 + 7 * count)
                     return actions.FunctionCall(_BUILD_SUPPLY_DEPOT, [_NOT_QUEUED, target])
         elif self.move_number == 2:
-            return actions.FunctionCall(_NO_OP, [])
+            if _HARVEST_GATHER in obs.observation['available_actions']:
+                    unit_y, unit_x = (unit_type == _NEUTRAL_MINERAL_FIELD).nonzero()
+                    if unit_y.any():
+                        i = random.randint(0, len(unit_y) - 1)
+                        m_x = unit_x[i]
+                        m_y = unit_y[i]
+                        target = [int(m_x), int(m_y)]
+                        return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+    
 
     def build_target(self, count, obs, building_type, target):
         unit_type = obs.observation['screen'][_UNIT_TYPE]
@@ -160,7 +168,14 @@ class SparseAgent(base_agent.BaseAgent):
                         print("FAT VAGINA")
                     return actions.FunctionCall(building_type, [_NOT_QUEUED, target])
         elif self.move_number == 2:
-            return actions.FunctionCall(_NO_OP, [])
+            if _HARVEST_GATHER in obs.observation['available_actions']:
+                unit_y, unit_x = (unit_type == _NEUTRAL_MINERAL_FIELD).nonzero()
+            if unit_y.any():
+                i = random.randint(0, len(unit_y) - 1)
+                m_x = unit_x[i]
+                m_y = unit_y[i]
+                target = [int(m_x), int(m_y)]
+                return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
 
     def build(self, count, obs, building_type):
         print("building {}".format(building_type))
