@@ -9,6 +9,8 @@ from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.lib import features
 
+import time
+
 _NO_OP = actions.FUNCTIONS.no_op.id
 _SELECT_POINT = actions.FUNCTIONS.select_point.id
 _BUILD_SUPPLY_DEPOT = actions.FUNCTIONS.Build_SupplyDepot_screen.id
@@ -35,6 +37,7 @@ _NEUTRAL_MINERAL_FIELD = 341
 _NOT_QUEUED = [0]
 _QUEUED = [1]
 _SELECT_ALL = [2]
+
 
 DATA_FILE = 'sparse_agent_data'
 
@@ -233,23 +236,17 @@ class SparseAgent(base_agent.BaseAgent):
             smart_action, x, y = self.splitAction(self.previous_action)
                 
             if smart_action == ACTION_BUILD_SUPPLY_DEPOT:
-                if supply_depot_count < 2 and _BUILD_SUPPLY_DEPOT in obs.observation['available_actions']:
+                if supply_depot_count < 10 and _BUILD_SUPPLY_DEPOT in obs.observation['available_actions']:
                     if self.cc_y.any():
-                        if supply_depot_count == 0:
-                            target = self.transformDistance(round(self.cc_x.mean()), -35, round(self.cc_y.mean()), 0)
-                        elif supply_depot_count == 1:
-                            target = self.transformDistance(round(self.cc_x.mean()), -25, round(self.cc_y.mean()), -25)
-    
+                        print(supply_depot_count)
+                        target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), -15 + 7*supply_depot_count)
                         return actions.FunctionCall(_BUILD_SUPPLY_DEPOT, [_NOT_QUEUED, target])
             
             elif smart_action == ACTION_BUILD_BARRACKS:
-                if barracks_count < 2 and _BUILD_BARRACKS in obs.observation['available_actions']:
+                if barracks_count < 10 and _BUILD_BARRACKS in obs.observation['available_actions']:
                     if self.cc_y.any():
-                        if  barracks_count == 0:
-                            target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), -9)
-                        elif  barracks_count == 1:
-                            target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), 12)
-    
+                        target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -15 + 11.5*barracks_count)
+                        print(target)
                         return actions.FunctionCall(_BUILD_BARRACKS, [_NOT_QUEUED, target])
     
             elif smart_action == ACTION_BUILD_MARINE:
