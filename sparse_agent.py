@@ -3,6 +3,7 @@ import random
 import numpy as np
 import pandas as pd
 
+from random import randint
 from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.lib import features
@@ -20,6 +21,8 @@ _SELECT_ARMY = actions.FUNCTIONS.select_army.id
 _ATTACK_MINIMAP = actions.FUNCTIONS.Attack_minimap.id
 _HARVEST_GATHER = actions.FUNCTIONS.Harvest_Gather_screen.id
 
+_SHARED_COLUMN = {_BUILD_STARPORT, _BUILD_BARRACKS, _BUILD_FACTORY}
+
 _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
 _UNIT_TYPE = features.SCREEN_FEATURES.unit_type.index
 _PLAYER_ID = features.SCREEN_FEATURES.player_id.index
@@ -29,13 +32,21 @@ _PLAYER_HOSTILE = 4
 _ARMY_SUPPLY = 5
 
 _TERRAN_COMMANDCENTER = 18
-_TERRAN_SCV = 45
 _TERRAN_SUPPLY_DEPOT = 19
+_TERRAN_REFINERY = 20
 _TERRAN_BARRACKS = 21
 _TERRAN_FACTORY = 27
 _TERRAN_STARPORT = 28
+_TERRAN_SCV = 45
 _NEUTRAL_MINERAL_FIELD = 341
 _NEUTRAL_VESPENE_GAS = 342
+
+_IDS = {_BUILD_BARRACKS: _TERRAN_BARRACKS,
+       _BUILD_STARPORT: _TERRAN_STARPORT,
+       _BUILD_FACTORY: _TERRAN_FACTORY,
+       _BUILD_REFINERY: _TERRAN_REFINERY,
+       _BUILD_SUPPLY_DEPOT: _TERRAN_SUPPLY_DEPOT,
+ }
 
 _NOT_QUEUED = [0]
 _QUEUED = [1]
@@ -148,22 +159,22 @@ class SparseAgent(base_agent.BaseAgent):
                     return actions.FunctionCall(_BUILD_SUPPLY_DEPOT, [_NOT_QUEUED, target])
         elif self.move_number == 2:
             if _HARVEST_GATHER in obs.observation['available_actions']:
-                    unit_y, unit_x = (unit_type == _NEUTRAL_MINERAL_FIELD).nonzero()
-                    if unit_y.any():
-                        i = random.randint(0, len(unit_y) - 1)
-                        m_x = unit_x[i]
-                        m_y = unit_y[i]
-                        target = [int(m_x), int(m_y)]
-                        return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
-    
-    def build_target(self, count, obs, building_type, target):
+                return self.return_worker_to_harvest(obs)
+
+    # assumes a worker is selected
+    def return_worker_to_harvest(self, obs):
+        r = randint(0, 21)
+        target = self.get_location(_NEUTRAL_VESPENE_GAS, obs) if r < 6 else \
+            self.get_location(_NEUTRAL_MINERAL_FIELD, obs)
+        return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+
+    def build_target(self, obs, building_type, target, max_amount):
         unit_type = obs.observation['screen'][_UNIT_TYPE]
         if self.move_number == 0:
             return self.select_workers(unit_type)
         elif self.move_number == 1:
-            if building_type == _BUILD_FACTORY:
-                print("I DREAM OF FACTRORIES")
-            if count < 8 and building_type in obs.observation['available_actions']:
+            amount = self.amount_of_building(_IDS[building_type], unit_type)
+            if amount < max_amount and building_type in obs.observation['available_actions']:
                 if building_type == _BUILD_FACTORY:
                     print("LETS BUILD A FACTORY")
                 return actions.FunctionCall(building_type, [_NOT_QUEUED, target])
@@ -173,19 +184,16 @@ class SparseAgent(base_agent.BaseAgent):
                     return actions.FunctionCall(building_type, [_NOT_QUEUED, target])
         elif self.move_number == 2:
             if _HARVEST_GATHER in obs.observation['available_actions'] and building_type is not _BUILD_REFINERY:
-                unit_y, unit_x = (unit_type == _NEUTRAL_MINERAL_FIELD).nonzero()
-                if unit_y.any():
-                    i = random.randint(0, len(unit_y) - 1)
-                    m_x = unit_x[i]
-                    m_y = unit_y[i]
-                    target = [int(m_x), int(m_y)]
-                    return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+                return self.return_worker_to_harvest(obs)
 
-    def build(self, count, obs, building_type):
-        #print("building {}".format(building_type))
-        #target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * count)
-        target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 16 * count)
-        return self.build_target(count, obs, building_type, target)
+    def build(self, obs, building_type, max_amount):
+        unit_type = obs.observation['screen'][_UNIT_TYPE]
+        if building_type in _SHARED_COLUMN:
+            amount = sum(map(lambda b: self.amount_of_building(_IDS[b], unit_type), _SHARED_COLUMN))
+        else:
+            amount = self.amount_of_building(_IDS[building_type], unit_type)
+        target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * amount)
+        return self.build_target(obs, building_type, target, max_amount)
 
     @staticmethod
     def get_location(_id, obs):
@@ -215,6 +223,16 @@ class SparseAgent(base_agent.BaseAgent):
 
         return (smart_action, x, y)
 
+    def amount_of_building(self, building_id, unit_type):
+        sizes = {_TERRAN_BARRACKS: 137,
+                 _TERRAN_STARPORT: 137,
+                 _TERRAN_FACTORY: 137,
+                 _TERRAN_REFINERY: 137,
+                 _TERRAN_SUPPLY_DEPOT: 69,
+                 }
+        _y, _ = (unit_type == building_id).nonzero()
+        return int(round(len(_y) / sizes[building_id]))
+
     def step(self, obs):
         super(SparseAgent, self).step(obs)
 
@@ -239,17 +257,11 @@ class SparseAgent(base_agent.BaseAgent):
             self.cc_y, self.cc_x = (unit_type == _TERRAN_COMMANDCENTER).nonzero()
 
         cc_y, cc_x = (unit_type == _TERRAN_COMMANDCENTER).nonzero()
-
         cc_count = 1 if cc_y.any() else 0
 
-        depot_y, depot_x = (unit_type == _TERRAN_SUPPLY_DEPOT).nonzero()
-        supply_depot_count = int(round(len(depot_y) / 69))
-
+        supply_depot_count = self.amount_of_building(_TERRAN_SUPPLY_DEPOT, unit_type)
         building_types = [_TERRAN_BARRACKS, _TERRAN_STARPORT, _TERRAN_FACTORY]
-        building_count = 0
-        for b in building_types:
-            _y, _ = (unit_type == b).nonzero()
-            building_count += int(round(len(_y) / 137))
+        building_count = sum(map(lambda b: self.amount_of_building(b, unit_type), building_types))
 
         if self.move_number == 0:
             current_state = np.zeros(8)
@@ -272,14 +284,14 @@ class SparseAgent(base_agent.BaseAgent):
         if smart_action == ACTION_BUILD_SUPPLY_DEPOT:
             move = self.build_supply_depot(supply_depot_count, obs)
         elif smart_action == ACTION_BUILD_BARRACKS:
-            move = self.build(building_count, obs, _BUILD_BARRACKS)
+            move = self.build(obs, _BUILD_BARRACKS, 2)
         elif smart_action == ACTION_BUILD_REFINERY:
             target = self.get_location(_NEUTRAL_VESPENE_GAS, obs)
-            move = self.build_target(building_count, obs, _BUILD_REFINERY, target)
+            move = self.build_target(obs, _BUILD_REFINERY, target, 2)
         elif smart_action == ACTION_BUILD_STARPORT:
-            move = self.build(building_count, obs, _BUILD_STARPORT)
+            move = self.build(obs, _BUILD_STARPORT, 1)
         elif smart_action == ACTION_BUILD_FACTORY:
-            move = self.build(building_count, obs, _BUILD_FACTORY)
+            move = self.build(obs, _BUILD_FACTORY, 1)
         else:
             move = actions.FunctionCall(_NO_OP, [])
         if move is None:
