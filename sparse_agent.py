@@ -1,6 +1,4 @@
 import random
-import math
-import os.path
 
 import numpy as np
 import pandas as pd
@@ -9,12 +7,13 @@ from pysc2.agents import base_agent
 from pysc2.lib import actions
 from pysc2.lib import features
 
-import time
-
 _NO_OP = actions.FUNCTIONS.no_op.id
 _SELECT_POINT = actions.FUNCTIONS.select_point.id
 _BUILD_SUPPLY_DEPOT = actions.FUNCTIONS.Build_SupplyDepot_screen.id
 _BUILD_BARRACKS = actions.FUNCTIONS.Build_Barracks_screen.id
+_BUILD_STARPORT = actions.FUNCTIONS.Build_Starport_screen.id
+_BUILD_REFINERY = actions.FUNCTIONS.Build_Refinery_screen.id
+_BUILD_FACTORY = actions.FUNCTIONS.Build_Factory_screen.id
 _TRAIN_MARINE = actions.FUNCTIONS.Train_Marine_quick.id
 _TRAIN_MEDIC = actions.FUNCTIONS.Train_Medivac_quick.id
 _SELECT_ARMY = actions.FUNCTIONS.select_army.id
@@ -33,7 +32,10 @@ _TERRAN_COMMANDCENTER = 18
 _TERRAN_SCV = 45
 _TERRAN_SUPPLY_DEPOT = 19
 _TERRAN_BARRACKS = 21
+_TERRAN_FACTORY = 27
+_TERRAN_STARPORT = 28
 _NEUTRAL_MINERAL_FIELD = 341
+_NEUTRAL_VESPENE_GAS = 342
 
 _NOT_QUEUED = [0]
 _QUEUED = [1]
@@ -47,13 +49,19 @@ ACTION_BUILD_SUPPLY_DEPOT = 'buildsupplydepot'
 ACTION_BUILD_BARRACKS = 'buildbarracks'
 ACTION_BUILD_MARINE = 'buildmarine'
 ACTION_BUILD_MEDIC = 'buildmedic'
+ACTION_BUILD_STARPORT = 'buildstarport'
+ACTION_BUILD_FACTORY = 'buildfactory'
+ACTION_BUILD_REFINERY = 'buildrefinery'
 ACTION_ATTACK = 'attack'
 
 smart_actions = [
-    #ACTION_DO_NOTHING,
+    ACTION_DO_NOTHING,
     ACTION_BUILD_SUPPLY_DEPOT,
-    #ACTION_BUILD_BARRACKS,
-    #ACTION_BUILD_MARINE,
+    ACTION_BUILD_BARRACKS,
+    ACTION_BUILD_MARINE,
+    ACTION_BUILD_STARPORT,
+    ACTION_BUILD_FACTORY,
+    ACTION_BUILD_REFINERY,
 ]
 
 for mm_x in range(0, 64):
@@ -117,13 +125,10 @@ class SparseAgent(base_agent.BaseAgent):
         super(SparseAgent, self).__init__()
 
         self.qlearn = QLearningTable(actions=list(range(len(smart_actions))))
-
         self.previous_action = None
         self.previous_state = None
-
         self.cc_y = None
         self.cc_x = None
-
         self.move_number = 0
 
         #if os.path.isfile(DATA_FILE + '.gz'):
@@ -137,12 +142,10 @@ class SparseAgent(base_agent.BaseAgent):
             print("targeting worker " + str(target))
             return actions.FunctionCall(_SELECT_POINT, [_NOT_QUEUED, target])
 
-
     def build_supply_depot(self, supply_depot_count, unit_type, obs):
         if self.move_number == 0:
             return self.select_workers(unit_type)
         elif self.move_number == 1:
-            print("Building SD")
             if supply_depot_count < 10 and _BUILD_SUPPLY_DEPOT in obs.observation['available_actions']:
                 if self.cc_y.any():
                     target = self.transformDistance(round(self.cc_x.mean()), 15, round(self.cc_y.mean()), -15 + 7 * supply_depot_count)
@@ -150,8 +153,66 @@ class SparseAgent(base_agent.BaseAgent):
         elif self.move_number == 2:
             return actions.FunctionCall(_NO_OP, [])
     
+    def build_barracks(self, count, unit_type, obs):
+        print("building barracks")
+        if self.move_number == 0:
+            return self.select_workers(unit_type)
+        elif self.move_number == 1:
+            if count < 10 and _BUILD_BARRACKS in obs.observation['available_actions']:
+                if self.cc_y.any():
+                    print("actually building")
+                    target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * count)
+                    return actions.FunctionCall(_BUILD_BARRACKS, [_NOT_QUEUED, target])
+        elif self.move_number == 2:
+            return actions.FunctionCall(_NO_OP, [])
 
+    def build_starport(self, count, unit_type, obs):
+        if self.move_number == 0:
+            return self.select_workers(unit_type)
+        elif self.move_number == 1:
+            if count < 1 and _BUILD_STARPORT in obs.observation['available_actions']:
+                if self.cc_y.any():
+                    target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * count)
+                    return actions.FunctionCall(_BUILD_STARPORT, [_NOT_QUEUED, target])
+        elif self.move_number == 2:
+            return actions.FunctionCall(_NO_OP, [])
 
+    def build_factory(self, count, unit_type, obs):
+        print("building factory")
+        if self.move_number == 0:
+            return self.select_workers(unit_type)
+        elif self.move_number == 1:
+            if count < 1 and _BUILD_FACTORY in obs.observation['available_actions']:
+                if self.cc_y.any():
+                    print("FAT VAGINA")
+                    target = self.transformDistance(round(self.cc_x.mean()), 30, round(self.cc_y.mean()), -30 + 11.5 * count)
+                    return actions.FunctionCall(_BUILD_FACTORY, [_NOT_QUEUED, target])
+        elif self.move_number == 2:
+            return actions.FunctionCall(_NO_OP, [])
+
+    def build_refinery(self, count, unit_type, obs):
+        print("building refinery")
+        if self.move_number == 0:
+            return self.select_workers(unit_type)
+        elif self.move_number == 1:
+            if count < 4 and _BUILD_REFINERY in obs.observation['available_actions']:
+                if self.cc_y.any():
+                    print("BIG DICK")
+                    target = self.get_location(_NEUTRAL_VESPENE_GAS, unit_type)
+                    print("vespene gas at {}".format(target))
+                    return actions.FunctionCall(_BUILD_REFINERY, [_NOT_QUEUED, target])
+        elif self.move_number == 2:
+            return actions.FunctionCall(_NO_OP, [])
+
+    def get_location(self, id, unit_type):
+        unit_y, unit_x = (unit_type == id).nonzero()
+
+        if unit_y.any():
+            i = random.randint(0, len(unit_y) - 1)
+
+            m_x = unit_x[i]
+            m_y = unit_y[i]
+            return [m_x, m_y]
 
     def transformDistance(self, x, x_distance, y, y_distance):
         if not self.base_top_left:
@@ -207,31 +268,18 @@ class SparseAgent(base_agent.BaseAgent):
         depot_y, depot_x = (unit_type == _TERRAN_SUPPLY_DEPOT).nonzero()
         supply_depot_count = int(round(len(depot_y) / 69))
 
-        barracks_y, barracks_x = (unit_type == _TERRAN_BARRACKS).nonzero()
-        barracks_count = int(round(len(barracks_y) / 137))
+        building_types = [_TERRAN_BARRACKS, _TERRAN_STARPORT, _TERRAN_FACTORY]
+        building_count = 0
+        for b in building_types:
+            _y, _ = (unit_type == b).nonzero()
+            building_count += int(round(len(_y) / 137))
 
         if self.move_number == 0:
-
             current_state = np.zeros(8)
             current_state[0] = cc_count
             current_state[1] = supply_depot_count
-            current_state[2] = barracks_count
+            current_state[2] = building_count
             current_state[3] = obs.observation['player'][_ARMY_SUPPLY]
-
-#            hot_squares = np.zeros(4)
- #           enemy_y, enemy_x = (
-  #              obs.observation['minimap'][_PLAYER_RELATIVE] == _PLAYER_HOSTILE).nonzero()
-   #         for i in range(0, len(enemy_y)):
-    #            y = int(math.ceil((enemy_y[i] + 1) / 32))
-     #           x = int(math.ceil((enemy_x[i] + 1) / 32))
-#
- #               hot_squares[((y - 1) * 2) + (x - 1)] = 1
-
-            #if not self.base_top_left:
-            #    hot_squares = hot_squares[::-1]
-
-#            for i in range(0, 4):
- #               current_state[i + 4] = hot_squares[i]
 
             if self.previous_action is not None:
                 self.qlearn.learn(str(self.previous_state),
@@ -243,20 +291,22 @@ class SparseAgent(base_agent.BaseAgent):
             self.previous_action = rl_action
 
         smart_action, x, y = self.splitAction(self.previous_action)
-        
+
         if smart_action == ACTION_BUILD_SUPPLY_DEPOT:
             move = self.build_supply_depot(supply_depot_count, unit_type, obs)
+        elif smart_action == ACTION_BUILD_BARRACKS:
+            move = self.build_barracks(building_count, unit_type, obs)
+        elif smart_action == ACTION_BUILD_REFINERY:
+            move = self.build_refinery(building_count, unit_type, obs)
+        elif smart_action == ACTION_BUILD_STARPORT:
+            move = self.build_starport(building_count, unit_type, obs)
+        elif smart_action == ACTION_BUILD_FACTORY:
+            move = self.build_factory(building_count, unit_type, obs)
         else:
             move = actions.FunctionCall(_NO_OP, [])
 
         if move is None:
             move = actions.FunctionCall(_NO_OP, [])
         
-
-        self.move_number += 1
-        if self.move_number == 3:
-           self.move_number = 0
+        self.move_number = 0 if self.move_number == 3 else self.move_number + 1
         return move
-        
-
-            
