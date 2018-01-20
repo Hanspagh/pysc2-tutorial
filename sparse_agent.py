@@ -46,8 +46,8 @@ DATA_FILE = 'sparse_agent_data'
 ACTION_DO_NOTHING = 'donothing'
 ACTION_BUILD_SUPPLY_DEPOT = 'buildsupplydepot'
 ACTION_BUILD_BARRACKS = 'buildbarracks'
-ACTION_BUILD_MARINE = 'buildmarine'
-ACTION_BUILD_MEDIC = 'buildmedic'
+ACTION_TRAIN_MARINE = 'buildmarine'
+ACTION_TRAIN_MEDIC = 'buildmedic'
 ACTION_BUILD_STARPORT = 'buildstarport'
 ACTION_BUILD_FACTORY = 'buildfactory'
 ACTION_BUILD_REFINERY = 'buildrefinery'
@@ -57,7 +57,8 @@ smart_actions = [
     ACTION_DO_NOTHING,
     ACTION_BUILD_SUPPLY_DEPOT,
     ACTION_BUILD_BARRACKS,
-    ACTION_BUILD_MARINE,
+    ACTION_TRAIN_MARINE,
+    ACTION_TRAIN_MARINE,
     ACTION_BUILD_STARPORT,
     ACTION_BUILD_FACTORY,
     ACTION_BUILD_REFINERY,
@@ -137,6 +138,20 @@ class SparseAgent(base_agent.BaseAgent):
             target = [unit_x[i], unit_y[i]]
             return actions.FunctionCall(_SELECT_POINT, [_NOT_QUEUED, target])
 
+
+    def train_unit(self, unit_type, building_type, obs):
+        print("Train unit " + str(unit_type))
+        units = obs.observation['screen'][_UNIT_TYPE]
+        if self.move_number == 0:
+            building_y, building_x = (units == building_type).nonzero()
+            if building_y.any():
+                    i = random.randint(0, len(building_y) - 1)
+                    target = [building_x[i], building_y[i]]
+                    return actions.FunctionCall(_SELECT_POINT, [_SELECT_ALL, target])
+        if self.move_number == 1:
+            if unit_type in obs.observation['available_actions']:
+                return actions.FunctionCall(unit_type, [_QUEUED])
+
     def build_supply_depot(self, count, obs):
         unit_type = obs.observation['screen'][_UNIT_TYPE]
         if self.move_number == 0:
@@ -170,12 +185,12 @@ class SparseAgent(base_agent.BaseAgent):
         elif self.move_number == 2:
             if _HARVEST_GATHER in obs.observation['available_actions']:
                 unit_y, unit_x = (unit_type == _NEUTRAL_MINERAL_FIELD).nonzero()
-            if unit_y.any():
-                i = random.randint(0, len(unit_y) - 1)
-                m_x = unit_x[i]
-                m_y = unit_y[i]
-                target = [int(m_x), int(m_y)]
-                return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
+                if unit_y.any():
+                    i = random.randint(0, len(unit_y) - 1)
+                    m_x = unit_x[i]
+                    m_y = unit_y[i]
+                    target = [int(m_x), int(m_y)]
+                    return actions.FunctionCall(_HARVEST_GATHER, [_QUEUED, target])
 
     def build(self, count, obs, building_type):
         print("building {}".format(building_type))
@@ -276,6 +291,10 @@ class SparseAgent(base_agent.BaseAgent):
             move = self.build(building_count, obs, _BUILD_STARPORT)
         elif smart_action == ACTION_BUILD_FACTORY:
             move = self.build(building_count, obs, _BUILD_FACTORY)
+        elif smart_action == ACTION_TRAIN_MARINE:
+            move = self.train_unit(_TRAIN_MARINE, _TERRAN_BARRACKS, obs)
+        elif smart_action == ACTION_TRAIN_MEDIC:
+            move = self.train_unit(_TRAIN_MEDIC, _TERRAN_STARPORT, obs)
         else:
             move = actions.FunctionCall(_NO_OP, [])
         if move is None:
